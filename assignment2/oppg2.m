@@ -33,4 +33,67 @@ grid on
 %print("oppg2c_boundary", "-dpng")
 
 %% Oppg. 2e)
-chi_c = deg2rad(30);
+
+step_5_degrees_data = load('dataset/task_2e/step_5_degrees.mat').ans;
+step_10_degrees_data = load('dataset/task_2e/step_10_degrees.mat').ans;
+step_15_degrees_data = load('dataset/task_2e/step_15_degrees.mat').ans;
+
+tiledlayout(3, 1);
+
+nexttile;
+plot_task_2efg(5, step_5_degrees_data, 50, -30, 10);
+
+nexttile;
+plot_task_2efg(10, step_10_degrees_data, 50, -30, 15);
+
+nexttile;
+plot_task_2efg(15, step_15_degrees_data, 50, -30, 25);
+
+
+%% Oppg. 2f)
+step_5_degrees_data = load('dataset/task_2f/step_5_degrees.mat').ans;
+step_10_degrees_data = load('dataset/task_2f/step_10_degrees.mat').ans;
+step_15_degrees_data = load('dataset/task_2f/step_15_degrees.mat').ans;
+
+tiledlayout(3, 1);
+
+nexttile;
+plot_task_2efg(5, step_5_degrees_data, 140, -30, 10);
+
+nexttile;
+plot_task_2efg(10, step_10_degrees_data, 140, -30, 15);
+
+nexttile;
+plot_task_2efg(15, step_15_degrees_data, 140, -30, 25);
+
+
+%% Oppg. 2g)
+with_anti_integrator_windup = load('dataset/task_2g/step_30_with_anti_integrator_windup.mat').ans;
+without_anti_integrator_windup = load('dataset/task_2g/step_30_without_anti_integrator_windup.mat').ans;
+
+tiledlayout(2, 1);
+
+nexttile;
+plot_task_2efg(30, without_anti_integrator_windup, 105, -30, 55);
+
+nexttile;
+plot_task_2efg(30, with_anti_integrator_windup, 88, -30, 30);
+
+%%
+function plot_task_2efg(reference_course, data, data_end, min_y, max_y)
+    time = data(1, 1:data_end);
+    course = data(3, 1:data_end) * 180 / pi;
+    delta_aileron = data(2, 1:data_end) * 180 / pi;
+
+    plot(time, course);
+    hold on;
+    plot(time, delta_aileron);
+    set(gca,'ytick',linspace(min_y,max_y, (max_y - min_y) / 5 + 1))
+    ylim([min_y - 5, max_y + 5]);
+    grid on;
+    xlabel("time");
+    legend('$\chi$', '$\delta_a$','Interpreter','latex')
+    title("Course angle setpoint " + reference_course + " degrees")
+end
+
+
