@@ -34,6 +34,16 @@ eta   = x(4:6)';
 delta = x(7);
 n     = x(8); 
 
+u = x(1);
+v = x(2);
+r = x(3);
+
+uc = 0;
+vc = 0;
+
+ur = x(1) - uc;
+vr = x(2) - vc;
+
 % ship parameters 
 m = 17.0677e6;          % mass (kg)
 Iz = 2.1732e10;         % yaw moment of inertia (kg m^3)
@@ -59,12 +69,17 @@ Nrdot = -2.4283e10;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Add added mass here
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+MA = -[ Xudot,   0,  0;
+       0,   Yvdot,  Yrdot;
+       0,   Nvdot,  Nrdot];
 
 % rigid-body mass matrix
 MRB = [ m 0    0 
         0 m    m*xg
         0 m*xg Iz ];
-Minv = inv(MRB);
+    
+M = MRB + MA;
+Minv = inv(M);
 
 % input matrix
 t_thr = 0.05;           % thrust deduction number
@@ -82,15 +97,48 @@ CRB = m * nu(3) * [ 0 -1 -xg
                 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Add Coriolis due to added mass here
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%   
+a1 = Xudot*x(1);
+a2 = Yvdot * x(2) + Yrdot * x(6);
+
+CA = [  0,  0,  a2;
+        0,  0,  -a1;
+        -a2, a1,    0];
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Add linear damping here
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+T1 = 20;
+T2 = 20;
+T6 = 10;
+
+% Missing off-diagonal elements?
+D = diag([(m-Xudot)/T1, (m-Yvdot)/T2, (Iz-Nrdot)/T6]);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Add nonlinear damping here
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+k = 0.1;
+CR = 0;
+epsilon = 0.001;
+Rn = L/10^-6 * abs(ur);
+Cf = 0.075/((log10(Rn) - 2)^2 + epsilon) + CR;
+S = B*L; % Waterplane
+X = -1/2*rho*S*(1+k)*Cf*abs(ur)*ur;
+
+% Strip theory: cross−flow drag integrals
+dx = L/10; % 10 strips
+Cd_2D = Hoerner(B,T);
+Ycf = 0;
+Ncf = 0;
+for xL = -L/2:dx:L/2
+    Ucf = abs(vr + xL * r) * (vr + xL * r);
+    Ycf = Ycf - 0.5 * rho * T * Cd_2D * Ucf * dx; % sway force
+    Ncf = Ncf - 0.5 * rho * T * Cd_2D * xL * Ucf * dx; % yaw moment
+end
+   
+Dn = diag([X, Ycf, Ncf]);
+N = CA + D + Dn;
 
 R = Rzyx(0,0,eta(3));
 
@@ -100,7 +148,7 @@ thr = rho * Dia^4 * KT * abs(n) * n;    % thrust command (N)
 % ship dynamics
 u = [ thr delta ]';
 tau = Bi * u;
-nu_dot = Minv * (tau - CRB * nu); 
+nu_dot = Minv * (tau - (CRB + N) * nu); 
 eta_dot = R * nu;    
 
 % Rudder saturation and dynamics (Sections 9.5.2)

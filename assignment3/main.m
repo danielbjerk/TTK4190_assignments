@@ -3,9 +3,14 @@
 % Author:           My name
 % Study program:    My study program
 
+clear all
+close all
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % USER INPUTS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+print_plots = 0;
+
 h  = 0.05;    % sampling time [s]
 Ns = 1000;    % no. of samples
 
@@ -78,6 +83,10 @@ subplot(313)
 plot(t,r,t,r_d,'linewidth',2);
 title('Actual and desired yaw rates (deg/s)'); xlabel('time (s)');
 
+if print_plots
+    saveas(gcf,"oppg4c_1", "epsc");
+end
+
 figure(2)
 figure(gcf)
 subplot(311)
@@ -89,3 +98,7 @@ title('Actual and commanded propeller speed (rpm)'); xlabel('time (s)');
 subplot(313)
 plot(t,delta,t,delta_c,'linewidth',2);
 title('Actual and commanded rudder angles (deg)'); xlabel('time (s)');
+
+if print_plots
+    saveas(gcf,"oppg4c_2", "epsc");
+end
