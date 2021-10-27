@@ -6,13 +6,15 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % USER INPUTS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-task = "1b";
+task = "2a";
 
 h  = 0.1;    % sampling time [s]
 Ns = 10000;    % no. of samples
 
 psi_ref = 10 * pi/180;  % desired yaw angle (rad)
 U_ref   = 7;            % desired surge speed (m/s)
+
+L_oa = 161;             % lenght of ship (m)
 
 % initial states
 nu_b_0  = [0.1 0 0]';     % initial velocity
@@ -35,7 +37,6 @@ for i=1:Ns+1
     eta_n = x(4:6);
     
     % current disturbance
-%     Vc = 0; % No current
     Vc = 1;
     beta_Vc = deg2rad(45);
     
@@ -46,10 +47,31 @@ for i=1:Ns+1
     nu_c_b = (Rzyx(0, 0, eta_n(3))')*nu_c_n;   % Velocity of ocean currents BODY {b}
     
     % wind disturbance
-    Ywind = 0;
-    Nwind = 0;
+    if t >= 200
+        Vw = 10;
+        beta_Vw = deg2rad(135);
+        rho_a = 1.247;
+        cy = 0.95;
+        cn = 0.15;
+        A_Lw = 10*L_oa;
+        
+        q = 0.5*rho_a*Vw^2;
+        gamma_w = eta_n(3) - beta_Vw - pi;
+        
+        CY_gamma = cy*sin(gamma_w);
+        CN_gamma = cn*sin(2*gamma_w);
+        
+        Ywind = q*CY_gamma*A_Lw;
+        Nwind = q*CN_gamma*A_Lw*L_oa;
+        
+        %disp(CY_gamma)
+        %disp(Ywind)
+    else
+        Ywind = 0;
+        Nwind = 0;
+    end
     tau_wind = [0 Ywind Nwind]';
-    
+
     % heading
     if (nu_b(2)^2 + nu_b(1)^2) ~= 0
         nu_n = Rzyx(0, 0, eta_n(3))*nu_b;   % nu in {n}
@@ -135,5 +157,14 @@ if task == "1b"
    legend("\beta _c","\beta")
 %    title('Crab angle vs. sideslip (deg) (V_c = 0)'); xlabel('time (s)');
    title('Crab angle vs. sideslip (deg) (V_c = 1)'); xlabel('time (s)');
+   grid on
+end
+
+if task == "1c"
+   hold on
+   %plot(t,u,'linewidth',2);
+   plot(t,u,t,u_d,'linewidth',2);
+   hold off
+   title('Actual and desired surge velocities (m/s)'); xlabel('time (s)');
    grid on
 end
