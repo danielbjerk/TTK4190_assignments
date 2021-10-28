@@ -30,7 +30,7 @@ K = 0.0075;
 wb = 0.06;
 zeta = 1;
 
-wn = 1/(sqrt(1-2*zeta^2 + sqrt(4*zeta^4 - 4*zeta^2 + 2)));
+wn = wb/(sqrt(1-2*zeta^2 + sqrt(4*zeta^4 - 4*zeta^2 + 2)));
 Kp = wn^2*T/K;
 Ki = wn^3*T/(10*K);
 Kd = (2*zeta*wn*T - 1)/K;
