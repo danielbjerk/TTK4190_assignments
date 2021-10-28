@@ -100,6 +100,10 @@ for i=1:Ns+1
     end
     tau_wind = [0 Ywind Nwind]';
 
+    if t >= 400
+        psi_ref = -20 * pi/180;
+    end
+    
     % heading
     if (nu_b(2)^2 + nu_b(1)^2) ~= 0
         nu_n = Rzyx(0, 0, eta_n(3))*nu_b;   % nu in {n}
