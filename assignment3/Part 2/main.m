@@ -30,7 +30,7 @@ K = 0.0075;
 wb = 0.06;
 zeta = 1;
 
-wn = 1/(sqrt(1-2*zeta^2 + sqrt(4*zeta^4 - 4*zeta^2 + 2)));
+wn = wb/(sqrt(1-2*zeta^2 + sqrt(4*zeta^4 - 4*zeta^2 + 2)));
 Kp = wn^2*T/K;
 Ki = wn^3*T/(10*K);
 Kd = (2*zeta*wn*T - 1)/K;
@@ -100,6 +100,10 @@ for i=1:Ns+1
     end
     tau_wind = [0 Ywind Nwind]';
 
+    if t >= 400
+        psi_ref = -20 * pi/180;
+    end
+    
     % heading
     if (nu_b(2)^2 + nu_b(1)^2) ~= 0
         nu_n = Rzyx(0, 0, eta_n(3))*nu_b;   % nu in {n}
