@@ -8,7 +8,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 close all
 
-task = "";
+task = "part5_2b";
 
 h  = 0.1;    % sampling time [s]
 Ns = 80000;%10000;    % no. of samples
@@ -61,6 +61,37 @@ B_r_y = [0; 0; w_r_y^3];
 waypoints = load("WP.mat").WP;
 threshold_radius = 80;
 lookahead_delta = 3*L_oa;
+
+% Kalman Filter variables
+measurement_noise = 0.5 * pi/180;
+process_noise_r = 0.1 * pi/180;
+x0_est = [0 0 0]';
+P0_est = eye(3);
+R = measurement_noise;
+Q = diag([process_noise_r, 0.01]);
+
+x_est = x0_est;
+P_est = P0_est;
+
+T_KF = -99.4713;
+K_KF = -0.0049;
+
+A_d = [1 h 0;
+       0 1-h/T_KF  -K_KF*h/T_KF;
+       0 0 1];
+   
+B_d = [0;
+       K_KF*h/T_KF;
+       0];
+   
+C_d = [1 0 0];
+
+E_d = [0 0;
+       h 0;
+       0 h];
+
+x_estimates = zeros(Ns+1, 3);
+y_t = zeros(Ns+1, 2);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % MAIN LOOP
@@ -166,7 +197,24 @@ for i=1:Ns+1
     simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d beta_c beta x_r_y(1)];      
  
     % Euler integration
-    x = euler2(xdot,x,h);    
+    x = euler2(xdot,x,h);
+    
+    %% Kalman filter
+    y = [normrnd(x(6), measurement_noise);       % Generate measurement
+         normrnd(xdot(6), process_noise_r)];
+    
+    K_KF = P_est * C_d'/(C_d * P_est * C_d' + R);  % Kalman gain
+    
+    % Corrector
+    x_est = x_est + K_KF * (y(1) - C_d * x_est); % D = 0
+    P_est = (eye(3) - K_KF * C_d) * P_est * (eye(3) - K_KF * C_d)' + K_KF * R * K_KF';
+    
+    x_estimates(i, :) = x_est;
+    y_t(i, :) = y;
+    
+    % Predictor
+    x_est = A_d * x_est + B_d * delta_c;
+    P_est = A_d * P_est * A_d' + E_d * Q * E_d';
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -187,39 +235,44 @@ u_d     = simdata(:,12);                % m/s
 psi_d   = (180/pi) * simdata(:,13);     % deg
 r_d     = (180/pi) * simdata(:,14);     % deg/s
 
-figure(1)
-figure(gcf)
-subplot(311)
-plot(y,x,'linewidth',2); axis('equal')
-legend("Actual", "Desired");
-title('North-East positions (m)'); xlabel('(m)'); ylabel('(m)'); 
-subplot(312)
-plot(t,psi,t,psi_d,'linewidth',2);
-legend("Actual", "Desired");
-title('Actual and desired yaw angles (deg)'); xlabel('time (s)');
-subplot(313)
-plot(t,r,t,r_d,'linewidth',2);
-legend("Actual", "Desired");
-title('Actual and desired yaw rates (deg/s)'); xlabel('time (s)');
+axis_font_size = 12;
+font_size = 16;
+line_width = 4;
+extra_inputs = {"fontsize", font_size, "LineWidth", line_width};
 
-%saveas(gcf, "Figures\oppg1c_integrator-windup.png")
-
-figure(2)
-figure(gcf)
-subplot(311)
-plot(t,u,t,u_d,'linewidth',2);
-legend("Actual", "Desired");
-title('Actual and desired surge velocities (m/s)'); xlabel('time (s)');
-subplot(312)
-plot(t,n,t,n_c,'linewidth',2);
-legend("Actual", "Desired");
-title('Actual and commanded propeller speed (rpm)'); xlabel('time (s)');
-subplot(313)
-plot(t,delta,t,delta_c,'linewidth',2);
-legend("Actual", "Desired");
-title('Actual and commanded rudder angles (deg)'); xlabel('time (s)');
-
-pathplotter(x,y);
+% figure(1)
+% figure(gcf)
+% subplot(311)
+% plot(y,x,'linewidth',2); axis('equal')
+% legend("Actual", "Desired");
+% title('North-East positions (m)'); xlabel('(m)'); ylabel('(m)'); 
+% subplot(312)
+% plot(t,psi,t,psi_d,'linewidth',2);
+% legend("Actual", "Desired");
+% title('Actual and desired yaw angles (deg)'); xlabel('time (s)');
+% subplot(313)
+% plot(t,r,t,r_d,'linewidth',2);
+% legend("Actual", "Desired");
+% title('Actual and desired yaw rates (deg/s)'); xlabel('time (s)');
+% 
+% %saveas(gcf, "Figures\oppg1c_integrator-windup.png")
+% 
+% figure(2)
+% figure(gcf)
+% subplot(311)
+% plot(t,u,t,u_d,'linewidth',2);
+% legend("Actual", "Desired");
+% title('Actual and desired surge velocities (m/s)'); xlabel('time (s)');
+% subplot(312)
+% plot(t,n,t,n_c,'linewidth',2);
+% legend("Actual", "Desired");
+% title('Actual and commanded propeller speed (rpm)'); xlabel('time (s)');
+% subplot(313)
+% plot(t,delta,t,delta_c,'linewidth',2);
+% legend("Actual", "Desired");
+% title('Actual and commanded rudder angles (deg)'); xlabel('time (s)');
+% 
+% pathplotter(x,y);
 
 if task ~= ""
     figure(3)
@@ -250,4 +303,49 @@ if task == "2d"
    hold off
    title('Reference model'); xlabel('time (s)');
    grid on
+end
+
+if task == "part5_2a"
+    hold on
+    plot(t, 180/pi*y_t(:,1), t, psi_data);
+    hold off
+    title('Measured vs true heading')
+    xlabel('Time [s]')
+    ylabel('Yaw [deg]')
+    legend('Measured', 'True', extra_inputs)
+    figure(4)
+    hold on
+    plot(t, 180/pi*y_t(:,2), t, r_data);
+    hold off
+    title('Measured vs true yaw rate')
+    xlabel('Time [s]')
+    ylabel('Yaw rate [deg/s]')
+    legend('Measured', 'True', extra_inputs)
+    %plot(t, x_estimates(:,3));
+end
+if task == "part5_2b"
+    subplot(311)
+    hold on
+    plot(t, 180/pi*x_estimates(:,1), ".", t, psi);
+    hold off
+    title('Estimated vs true heading')
+    xlabel('Time [s]')
+    ylabel('Yaw [deg]')
+    legend('Estimated', 'True')
+    subplot(312)
+    hold on
+    plot(t, 180/pi*x_estimates(:,2), ".", t, r);
+    hold off
+    title('Estimated vs true yaw rate')
+    xlabel('Time [s]')
+    ylabel('Yaw rate [deg/s]')
+    legend('Estimated', 'True')
+    subplot(313)
+    hold on
+    plot(t, 180/pi*x_estimates(:,3));
+    hold off
+    title('Estimated rudder bias')
+    xlabel('Time [s]')
+    ylabel('Yaw rate [deg/s]')
+    legend('Estimated')
 end
