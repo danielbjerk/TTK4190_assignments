@@ -136,6 +136,24 @@ for i=1:Ns+1
     psi = eta_n(3);
     r = nu_b(3);
     
+    % Kalman filter
+    y = [normrnd(x(6), measurement_noise_psi);       % Generate measurement
+         normrnd(xdot(6), measurement_noise_r)];
+    
+    K_KF = P_est * C_d'/(C_d * P_est * C_d' + R);  % Kalman gain
+    
+    % Corrector
+    x_est = x_est + K_KF * (y(1) - C_d * x_est); % D = 0
+    P_est = (eye(3) - K_KF * C_d) * P_est * (eye(3) - K_KF * C_d)' + K_KF * R * K_KF';
+    
+    x_estimates(i, :) = x_est;
+    y_t(i, :) = y;
+
+      
+    % Predictor
+    x_est = A_d * x_est + B_d * delta_c;
+    P_est = A_d * P_est * A_d' + E_d * Q * E_d';
+    
     % Disturbance due to water currents
     Vc = 1;
     beta_Vc = deg2rad(45);
