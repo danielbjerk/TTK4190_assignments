@@ -73,9 +73,12 @@ waypoints = load("WP.mat").WP;
 wp_last = waypoints(:,1);
 wp_next = waypoints(:,2);
 
+y_e_p_int = 0;
+
 at_endpoint = false;
 threshold_radius = 10*L_oa;
 lookahead_delta = 10*L_oa;
+kappa = 5;
 
 % Kalman Filter variables
 measurement_noise_psi = 0.5 * pi/180;
@@ -111,7 +114,7 @@ y_t = zeros(Ns+1, 2);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % MAIN LOOP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-simdata = zeros(Ns+1,17);       % table of simulation data
+simdata = zeros(Ns+1,19);       % table of simulation data
 
 for i=1:Ns+1
     
@@ -187,13 +190,13 @@ for i=1:Ns+1
         nu_r = nu_b - nu_c_b;
         beta = atan2(nu_r(2), nu_r(1));
     else
-        chi = NaN;
+        chi = 0;
     end
     
     % references
     % guidance law (yaw reference)
     % Current status
-    [x_p, y_p, y_e_p] = crosstrack(wp_next(1),...
+    [x_p, y_p, ~] = crosstrack(wp_next(1),...
                                    wp_next(2),...
                                    wp_last(1),...
                                    wp_last(2),...
@@ -212,8 +215,16 @@ for i=1:Ns+1
         at_endpoint = true;
     end
     
-    chi_d = guidance(eta_n, wp_last, wp_next, lookahead_delta);
+   [~, ~, y_e_p] = crosstrack(wp_next(1),...
+           wp_next(2),...
+           wp_last(1),...
+           wp_last(2),...
+           eta_n(1),...
+           eta_n(2));
+    y_e_p_int = y_e_p_int + h*lookahead_delta*y_e_p/(lookahead_delta^2 + (y_e_p + kappa * y_e_p_int)^2);
+    chi_d = guidance(y_e_p, y_e_p_int, wp_last, wp_next, lookahead_delta, kappa);
     psi_ref = chi_d;
+    %psi_ref = chi_d - beta_c;   % Crab angle compensation
     
     % reference models
     % yaw
@@ -228,7 +239,7 @@ for i=1:Ns+1
         U_ref = U_ref;
     end
     %x_r_u = x_r_u + (-w_n_u*x_r_u + U_ref)*h;
-    %u_d = x_r_u;
+    %u_d = x_r_u; Doesnt work:(
     u_d = U_ref;
         
     % control laws
@@ -254,7 +265,7 @@ for i=1:Ns+1
     [xdot,u] = ship(x,u,nu_c_n,tau_wind,u_d);
     
     % store simulation data in a table (for testing)
-    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d beta_c beta x_r_y(1)];      
+    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d beta_c beta x_r_y(1), chi, chi_d];      
  
     % Euler integration
     x = euler2(xdot,x,h);
@@ -277,53 +288,63 @@ n_c     = 60 * simdata(:,11);           % rpm
 u_d     = simdata(:,12);                % m/s
 psi_d   = (180/pi) * simdata(:,13);     % deg
 r_d     = (180/pi) * simdata(:,14);     % deg/s
+beta_c     = (180/pi) * simdata(:,15);  % deg
+beta     = (180/pi) * simdata(:,16);  % deg
 
-% figure(1)
-% figure(gcf)
-% subplot(311)
-% plot(y,x,'linewidth',2); axis('equal')
-% title('North-East positions (m)'); xlabel('(m)'); ylabel('(m)'); 
-% subplot(312)
-% plot(t,psi,t,psi_d,'linewidth',2);
-% legend("Actual", "Desired");
-% title('Actual and desired yaw angles (deg)'); xlabel('time (s)');
-% subplot(313)
-% plot(t,r,t,r_d,'linewidth',2);
-% legend("Actual", "Desired");
-% title('Actual and desired yaw rates (deg/s)'); xlabel('time (s)');
-% 
-% %saveas(gcf, "Figures\oppg1c_pos-and-yaw.eps")
-% 
-% figure(2)
-% figure(gcf)
-% subplot(311)
-% plot(t,u,t,u_d,'linewidth',2);
-% legend("Actual", "Desired");
-% title('Actual and desired surge velocities (m/s)'); xlabel('time (s)');
-% subplot(312)
-% plot(t,n,t,n_c,'linewidth',2);
-% legend("Actual", "Desired");
-% title('Actual and commanded propeller speed (rpm)'); xlabel('time (s)');
-% subplot(313)
-% plot(t,delta,t,delta_c,'linewidth',2);
-% legend("Actual", "Desired");
-% title('Actual and commanded rudder angles (deg)'); xlabel('time (s)');
+chi     = (180/pi) * simdata(:,18);  % deg
+chi_d   = (180/pi) * simdata(:,19);  % deg
 
-%saveas(gcf, "Figures\oppg1c_surge-and-rudder.eps")
+figure(1)
+figure(gcf)
+subplot(311)
+plot(y,x,'linewidth',2); axis('equal')
+title('North-East positions (m)'); xlabel('(m)'); ylabel('(m)'); 
+subplot(312)
+plot(t,psi,t,psi_d,'linewidth',2);
+legend("Actual", "Desired");
+title('Actual and desired yaw angles (deg)'); xlabel('time (s)');
+subplot(313)
+plot(t,r,t,r_d,'linewidth',2);
+legend("Actual", "Desired");
+title('Actual and desired yaw rates (deg/s)'); xlabel('time (s)');
+
+%saveas(gcf, "Figures\oppg1c_pos-and-yaw", "epsc")
+
+figure(2)
+figure(gcf)
+subplot(311)
+plot(t,u,t,u_d,'linewidth',2);
+legend("Actual", "Desired");
+title('Actual and desired surge velocities (m/s)'); xlabel('time (s)');
+subplot(312)
+plot(t,n,t,n_c,'linewidth',2);
+legend("Actual", "Desired");
+title('Actual and commanded propeller speed (rpm)'); xlabel('time (s)');
+subplot(313)
+plot(t,delta,t,delta_c,'linewidth',2);
+legend("Actual", "Desired");
+title('Actual and commanded rudder angles (deg)'); xlabel('time (s)');
+
+%saveas(gcf, "Figures\oppg1c_surge-and-rudder", "epsc")
 
 pathplotter(x,y);
-
+%%
 if task ~= ""
     figure(3)
     figure(gcf)
 end
-if task == "1b"
-   hold on
-   plot(t,beta_c_data,t,beta_data,'linewidth',2);
-   hold off
+
+if task == "2a"
+   subplot(211)
+   plot(t,chi,t,chi_d,t,psi,"linewidth",2)
+   legend("\chi", "\chi _d", "\psi")
+   title("Course and heading with crab angle compensation (deg) (V_c = 1)"); xlabel('time (s)');
+   xlim([0, 5500])
+   subplot(212)
+   plot(t,beta_c,t,beta,'linewidth',2);
    legend("\beta _c","\beta")
-%    title('Crab angle vs. sideslip (deg) (V_c = 0)'); xlabel('time (s)');
    title('Crab angle vs. sideslip (deg) (V_c = 1)'); xlabel('time (s)');
+   xlim([0, 5500])
    grid on
 end
 
