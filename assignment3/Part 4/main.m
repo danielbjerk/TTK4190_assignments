@@ -237,7 +237,7 @@ for i=1:Ns+1
     
     %%%% Control laws %%%%
     % Yaw
-    e_psi = ssa(x_estimates(i,1) - psi_d);
+    e_psi = ssa(psi - psi_d);
     e_psi_int = e_psi_int + h*e_psi;
     
     delta_c = -(Kp*e_psi + Kd*r + Ki*e_psi_int); % rudder angle command (rad)  
