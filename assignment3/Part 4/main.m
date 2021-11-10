@@ -6,19 +6,23 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % USER INPUTS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+close all
+
 task = "";
 
 h  = 0.1;    % sampling time [s]
-Ns = 10000;    % no. of samples
+Ns = 80000;%10000;    % no. of samples
 
-psi_ref = 10 * pi/180;  % desired yaw angle (rad)
 U_ref   = 9;            % desired surge speed (m/s)
 
+
+% ship parameters
 L_oa = 161;             % lenght of ship (m)
+delta_max  = 40 * pi/180; % Rudder angle
 
 % initial states
 nu_b_0  = [0.1 0 0]';     % initial velocity
-eta_n_0 = [0 0 0]';       % initial position & heading
+eta_n_0 = [0 0 deg2rad(-110)]';       % initial position & heading
 delta = 0;  
 n = 0;
 x = [nu_b_0' eta_n_0' delta n]';
@@ -52,6 +56,11 @@ A_r_y =     [   0,      1,      0;
                     0,      0,      1;
                     -w_r_y^3,   -(2*zeta_r_y + 1)*w_r_y^2,  -(2*zeta_r_y + 1)*w_r_y];
 B_r_y = [0; 0; w_r_y^3];
+
+% guidance objective
+waypoints = load("WP.mat").WP;
+threshold_radius = 80;
+lookahead_delta = 3*L_oa;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % MAIN LOOP
@@ -118,9 +127,9 @@ for i=1:Ns+1
     end
     
     % references
-    if t >= 400
-        psi_ref = -20 * pi/180;
-    end
+    % guidance law (yaw reference)
+    chi_d = guidance(eta_n(1:2), waypoints, threshold_radius, lookahead_delta);
+    psi_ref = chi_d;
     
     % reference models
     % yaw
@@ -131,12 +140,18 @@ for i=1:Ns+1
     % foreward velocity
     u_d = U_ref;
         
-    % control law
+    % control laws
     % yaw
     e_psi = ssa(psi - psi_d);
     e_psi_int = e_psi_int + h*e_psi;
     
-    delta_c = -(Kp*e_psi + Kd*r + Ki*e_psi_int); % rudder angle command (rad)
+    delta_c = -(Kp*e_psi + Kd*r + Ki*e_psi_int); % rudder angle command (rad)  
+    % integrator anti-windup (yaw)
+    if abs(delta_c) >= delta_max
+       delta_c = delta_max*sign(delta_c);
+       e_psi_int = e_psi_int - h*e_psi; % Stop integration.
+    end
+    
     % surge
     e_u = nu_b(1) - u_d;
     e_u_int = e_u_int + h*e_u;
@@ -187,6 +202,8 @@ plot(t,r,t,r_d,'linewidth',2);
 legend("Actual", "Desired");
 title('Actual and desired yaw rates (deg/s)'); xlabel('time (s)');
 
+%saveas(gcf, "Figures\oppg1c_integrator-windup.png")
+
 figure(2)
 figure(gcf)
 subplot(311)
@@ -201,6 +218,8 @@ subplot(313)
 plot(t,delta,t,delta_c,'linewidth',2);
 legend("Actual", "Desired");
 title('Actual and commanded rudder angles (deg)'); xlabel('time (s)');
+
+pathplotter(x,y);
 
 if task ~= ""
     figure(3)
