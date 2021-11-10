@@ -23,6 +23,7 @@ delta = 0;
 n = 0;
 x = [nu_b_0' eta_n_0' delta n]';
 
+% Controllers
 % Yaw PID-controller design parameters
 T = 169.5493;
 K = 0.0075;
@@ -34,8 +35,12 @@ wn = wb/(sqrt(1-2*zeta^2 + sqrt(4*zeta^4 - 4*zeta^2 + 2)));
 Kp = wn^2*T/K;
 Ki = wn^3*T/(10*K);
 Kd = (2*zeta*wn*T - 1)/K;
+% Surge velocity PID
+Kp_u = 1;
+Ki_u = 0.3;
 
 e_psi_int = 0;      % integration state
+e_u_int = 0;
 
 % reference models
 % yaw
@@ -133,7 +138,10 @@ for i=1:Ns+1
     
     delta_c = -(Kp*e_psi + Kd*r + Ki*e_psi_int); % rudder angle command (rad)
     % surge
-    n_c = 10;                   % propeller speed (rps)
+    e_u = nu_b(1) - u_d;
+    e_u_int = e_u_int + h*e_u;
+    n_c = -(Kp_u*e_u + Ki_u*e_u_int);                   % propeller speed (rps) 
+    %(OBS! Summeres med feedforeward i ship.m)
     
     % ship dynamics
     u = [delta_c n_c]';
@@ -194,8 +202,10 @@ plot(t,delta,t,delta_c,'linewidth',2);
 legend("Actual", "Desired");
 title('Actual and commanded rudder angles (deg)'); xlabel('time (s)');
 
-figure(3)
-figure(gcf)
+if task ~= ""
+    figure(3)
+    figure(gcf)
+end
 if task == "1b"
    hold on
    plot(t,beta_c_data,t,beta_data,'linewidth',2);

@@ -170,10 +170,15 @@ end
 % propeller dynamics
 t = 0.1;
 T_d = Xu * u_d / (t - 1);
-n_c = sign(T_d)*sqrt(abs(T_d) /( rho * Dia^4 * KT) );                   % propeller speed (rps)
+K_ff_u = sign(T_d)*sqrt(abs(T_d) /( rho * Dia^4 * KT) );    % Feed foreward on u
+n_c = n_c + K_ff_u;                   % propeller speed (rps)
+
 Q_d =  rho * Dia^5 * KQ * abs(n_c) * n_c;
 Q_m = 1/(1+T_m) * Q_d;
-Q = rho * Dia^5 * KQ * abs(n) * n;
+K_ff_n = rho * Dia^5 * KQ * abs(n) * n;   % Feed foreward on n
+K_p_n = 1;
+Q = K_p_n *(n - n_c) + K_ff_n;   % Feedback and foreward (on n)
+
 n_dot = (Q_m - Q)/I_m;                  % assume Q_f = 0
 
 xdot = [nu_dot' eta_dot' delta_dot n_dot]';
