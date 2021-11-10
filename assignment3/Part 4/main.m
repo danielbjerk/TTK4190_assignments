@@ -1,7 +1,4 @@
 % Project in TTK4190 Guidance, Navigation and Control of Vehicles 
-%
-% Author:           My name
-% Study program:    My study program
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % USER INPUTS
@@ -10,23 +7,13 @@ close all
 
 task = "";
 
-h  = 0.1;    % sampling time [s]
-Ns = 60000;%10000;    % no. of samples
+h  = 0.1;               % sampling time [s]
+Ns = 60000;             % no. of samples
 
 U_ref   = 9;            % desired surge speed (m/s)
 
 
-% ship parameters
-L_oa = 161;             % lenght of ship (m)
-delta_max  = 40 * pi/180; % Rudder angle
-% Motor coefficents
-Ja = 0;
-AEAO = 0.65;
-PD = 1.5; 
-z = 4;
-[KT , KQ] = wageningen(Ja,PD, AEAO, z);
-
-% initial states
+%%%% Initial states %%%%
 nu_b_0  = [0.1 0 0]';     % initial velocity
 eta_n_0 = [0 0 deg2rad(-110)]';       % initial position & heading
 delta = 0;  
@@ -35,10 +22,24 @@ x = [nu_b_0' eta_n_0' delta n]';
 xdot = zeros(8, 1);
 delta_c = 0;
 
-% Controllers
+
+%%%% Coefficients %%%%
+% Ship coefficients
+L_oa = 161;             % lenght of ship (m)
+delta_max  = 40 * pi/180; % Rudder angle
+
+% Motor coefficients
+Ja = 0;
+AEAO = 0.65;
+PD = 1.5; 
+z = 4;
+[KT , KQ] = wageningen(Ja,PD, AEAO, z);
+
+
+%%%% Controller parameters %%%%
 % Yaw PID-controller design parameters
-T = 169.5493;
-K = 0.0075;
+T = 169.5493;       % Nomoto gain
+K = 0.0075;         % Nomoto time constant
 
 wb = 0.06;
 zeta = 1;
@@ -47,14 +48,17 @@ wn = wb/(sqrt(1-2*zeta^2 + sqrt(4*zeta^4 - 4*zeta^2 + 2)));
 Kp = wn^2*T/K;
 Ki = wn^3*T/(10*K);
 Kd = (2*zeta*wn*T - 1)/K;
+
 % Surge velocity PID
 Kp_u = 1;
 Ki_u = 0.3;
 
-e_psi_int = 0;      % integration state
+% Integration states
+e_psi_int = 0;      
 e_u_int = 0;
 
-% reference models
+
+%%%% Reference model parameters %%%%
 % yaw
 x_r_y = [0;0;0];
 
@@ -64,21 +68,25 @@ A_r_y =     [   0,      1,      0;
                     0,      0,      1;
                     -w_r_y^3,   -(2*zeta_r_y + 1)*w_r_y^2,  -(2*zeta_r_y + 1)*w_r_y];
 B_r_y = [0; 0; w_r_y^3];
+
 % Surge velocity (unused)
 w_n_u = 0.01;
 x_r_u = U_ref;
 
-% guidance objective
+
+%%%% Guidance parameters %%%%
 waypoints = load("WP.mat").WP;
 wp_last = waypoints(:,1);
 wp_next = waypoints(:,2);
 
-y_e_p_int = 0;
-
+y_e_p_int = 0;  % integration state
 at_endpoint = false;
+
+% Tunables
 threshold_radius = 10*L_oa;
 lookahead_delta = 10*L_oa;
-kappa = 5;
+kappa = 1;      % Set kappa=0 for LOS instead of ILOS
+
 
 % Kalman Filter variables
 measurement_noise_psi = 0.5 * pi/180;
@@ -114,13 +122,14 @@ y_t = zeros(Ns+1, 2);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % MAIN LOOP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-simdata = zeros(Ns+1,19);       % table of simulation data
+simdata = zeros(Ns+1,20);       % table of simulation data
 
 for i=1:Ns+1
     
     t = (i-1) * h;              % time (s)
     
-    % current state
+    %%%% Update states %%%%
+    % Ship state
     nu_b = x(1:3);
     eta_n = x(4:6);
     
@@ -145,7 +154,7 @@ for i=1:Ns+1
     x_est = A_d * x_est + B_d * delta_c;
     P_est = A_d * P_est * A_d' + E_d * Q * E_d';
     
-    % current disturbance
+    % Disturbance due to water currents
     Vc = 1;
     beta_Vc = deg2rad(45);
     
@@ -173,15 +182,13 @@ for i=1:Ns+1
         Ywind = q*CY_gamma*A_Lw;
         Nwind = q*CN_gamma*A_Lw*L_oa;
         
-        %disp(CY_gamma)
-        %disp(Ywind)
     else
         Ywind = 0;
         Nwind = 0;
     end
     tau_wind = [0 Ywind Nwind]';
     
-    % heading
+    % Calculate heading and crab angles
     if (nu_b(2)^2 + nu_b(1)^2) ~= 0
         nu_n = Rzyx(0, 0, eta_n(3))*nu_b;   % nu in {n}
         chi = atan2(nu_n(2), nu_n(1));
@@ -193,8 +200,8 @@ for i=1:Ns+1
         chi = 0;
     end
     
-    % references
-    % guidance law (yaw reference)
+    
+    %%%% Guidance logic %%%%
     % Current status
     [x_p, y_p, ~] = crosstrack(wp_next(1),...
                                    wp_next(2),...
@@ -215,6 +222,7 @@ for i=1:Ns+1
         at_endpoint = true;
     end
     
+   % Calculate desired course
    [~, ~, y_e_p] = crosstrack(wp_next(1),...
            wp_next(2),...
            wp_last(1),...
@@ -226,13 +234,15 @@ for i=1:Ns+1
     psi_ref = chi_d;
     %psi_ref = chi_d - beta_c;   % Crab angle compensation
     
-    % reference models
-    % yaw
+    
+    %%%% Reference models %%%%
+    % Yaw
     x_r_y = x_r_y + (A_r_y*x_r_y + B_r_y*psi_ref)*h;
     
     psi_d = x_r_y(1);
     r_d = x_r_y(2);
-    % foreward velocity
+    
+    % Surge speed
     if at_endpoint
         U_ref = 0;
     else
@@ -242,30 +252,33 @@ for i=1:Ns+1
     %u_d = x_r_u; Doesnt work:(
     u_d = U_ref;
         
-    % control laws
-    % yaw
+    
+    %%%% Control laws %%%%
+    % Yaw
     e_psi = ssa(x_estimates(i,1) - psi_d);
     e_psi_int = e_psi_int + h*e_psi;
     
     delta_c = -(Kp*e_psi + Kd*r + Ki*e_psi_int); % rudder angle command (rad)  
+    
     % integrator anti-windup (yaw)
     if abs(delta_c) >= delta_max
        delta_c = delta_max*sign(delta_c);
        e_psi_int = e_psi_int - h*e_psi; % Stop integration.
     end
     
-    % surge
+    % Surge
     e_u = nu_b(1) - u_d;
     e_u_int = e_u_int + h*e_u;
     n_c = -(Kp_u*e_u + Ki_u*e_u_int);                   % propeller speed (rps) 
     %(OBS! Summeres med feedforeward i ship.m)
     
-    % ship dynamics
+    
+    %%%% Ship dynamics %%%%
     u = [delta_c n_c]';
     [xdot,u] = ship(x,u,nu_c_n,tau_wind,u_d);
     
     % store simulation data in a table (for testing)
-    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d beta_c beta x_r_y(1), chi, chi_d];      
+    simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d beta_c beta x_r_y(1), chi, chi_d, y_e_p];      
  
     % Euler integration
     x = euler2(xdot,x,h);
@@ -293,6 +306,7 @@ beta     = (180/pi) * simdata(:,16);  % deg
 
 chi     = (180/pi) * simdata(:,18);  % deg
 chi_d   = (180/pi) * simdata(:,19);  % deg
+e_p_y   = simdata(:,20);             % m
 
 figure(1)
 figure(gcf)
@@ -327,8 +341,8 @@ title('Actual and commanded rudder angles (deg)'); xlabel('time (s)');
 
 %saveas(gcf, "Figures\oppg1c_surge-and-rudder", "epsc")
 
-pathplotter(x,y);
-%%
+%pathplotter(x,y);
+
 if task ~= ""
     figure(3)
     figure(gcf)
@@ -347,6 +361,12 @@ if task == "2a"
    xlim([0, 5500])
    grid on
 end
+
+if task == "2d"
+   hold on
+   plot(t,e_p_y,"linewidth",2)
+   title("Cross-track error with and without ILOS (V_c = 1)"); xlabel('time (s)');
+   grid on
 
 if task == "1c"
    hold on
