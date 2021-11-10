@@ -19,6 +19,8 @@ eta_n_0 = [0 0 deg2rad(-110)]';       % initial position & heading
 delta = 0;  
 n = 0;
 x = [nu_b_0' eta_n_0' delta n]';
+xdot = zeros(8, 1);
+delta_c = 0;
 
 
 %%%% Coefficients %%%%
@@ -86,6 +88,37 @@ lookahead_delta = 10*L_oa;
 kappa = 1;      % Set kappa=0 for LOS instead of ILOS
 
 
+% Kalman Filter variables
+measurement_noise_psi = 0.5 * pi/180;
+measurement_noise_r = 0.1 * pi/180;
+x0_est = [0 0 0]';
+P0_est = eye(3);
+R = measurement_noise_psi;
+Q = 1e-8*eye(2);
+
+x_est = x0_est;
+P_est = P0_est;
+
+T_KF = -99.4713;
+K_KF = -0.0049;
+
+A_d = [1 h 0;
+       0 1-h/T_KF  -K_KF*h/T_KF;
+       0 0 1];
+   
+B_d = [0;
+       K_KF*h/T_KF;
+       0];
+   
+C_d = [1 0 0];
+
+E_d = [0 0;
+       h 0;
+       0 h];
+
+x_estimates = zeros(Ns+1, 3);
+y_t = zeros(Ns+1, 2);
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % MAIN LOOP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -102,6 +135,24 @@ for i=1:Ns+1
     
     psi = eta_n(3);
     r = nu_b(3);
+    
+    % Kalman filter
+    y = [normrnd(x(6), measurement_noise_psi);       % Generate measurement
+         normrnd(xdot(6), measurement_noise_r)];
+    
+    K_KF = P_est * C_d'/(C_d * P_est * C_d' + R);  % Kalman gain
+    
+    % Corrector
+    x_est = x_est + K_KF * (y(1) - C_d * x_est); % D = 0
+    P_est = (eye(3) - K_KF * C_d) * P_est * (eye(3) - K_KF * C_d)' + K_KF * R * K_KF';
+    
+    x_estimates(i, :) = x_est;
+    y_t(i, :) = y;
+
+      
+    % Predictor
+    x_est = A_d * x_est + B_d * delta_c;
+    P_est = A_d * P_est * A_d' + E_d * Q * E_d';
     
     % Disturbance due to water currents
     Vc = 1;
@@ -204,7 +255,7 @@ for i=1:Ns+1
     
     %%%% Control laws %%%%
     % Yaw
-    e_psi = ssa(psi - psi_d);
+    e_psi = ssa(x_estimates(i,1) - psi_d);
     e_psi_int = e_psi_int + h*e_psi;
     
     delta_c = -(Kp*e_psi + Kd*r + Ki*e_psi_int); % rudder angle command (rad)  
@@ -230,7 +281,7 @@ for i=1:Ns+1
     simdata(i,:) = [t x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d beta_c beta x_r_y(1), chi, chi_d, y_e_p];      
  
     % Euler integration
-    x = euler2(xdot,x,h);    
+    x = euler2(xdot,x,h);
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -316,4 +367,88 @@ if task == "2d"
    plot(t,e_p_y,"linewidth",2)
    title("Cross-track error with and without ILOS (V_c = 1)"); xlabel('time (s)');
    grid on
+
+if task == "1c"
+   hold on
+   %plot(t,u,'linewidth',2);
+   plot(t,u,t,u_d,'linewidth',2);
+   hold off
+   title('Actual and desired surge velocities (m/s)'); xlabel('time (s)');
+   grid on
+end
+
+if task == "2d"
+    hold on
+   plot(t,x_r_y_data,'linewidth',2);
+   hold off
+   title('Reference model'); xlabel('time (s)');
+   grid on
+end
+
+if task == "part5_2a"
+    hold on
+    plot(t, 180/pi*y_t(:,1), t, psi_data);
+    hold off
+    title('Measured vs true heading')
+    xlabel('Time [s]')
+    ylabel('Yaw [deg]')
+    legend('Measured', 'True', extra_inputs)
+    figure(4)
+    hold on
+    plot(t, 180/pi*y_t(:,2), t, r_data);
+    hold off
+    title('Measured vs true yaw rate')
+    xlabel('Time [s]')
+    ylabel('Yaw rate [deg/s]')
+    legend('Measured', 'True', extra_inputs)
+    %plot(t, x_estimates(:,3));
+end
+if task == "part5_2b"
+    subplot(311)
+    hold on
+    plot(t, 180/pi*x_estimates(:,1), ".", t, psi);
+    hold off
+    title('Estimated vs true heading')
+    xlabel('Time [s]')
+    ylabel('Yaw [deg]')
+    legend('Estimated', 'True')
+    subplot(312)
+    hold on
+    plot(t, 180/pi*x_estimates(:,2), ".", t, r);
+    hold off
+    title('Estimated vs true yaw rate')
+    xlabel('Time [s]')
+    ylabel('Yaw rate [deg/s]')
+    legend('Estimated', 'True')
+    subplot(313)
+    hold on
+    plot(t, 180/pi*x_estimates(:,3));
+    hold off
+    title('Estimated rudder bias')
+    xlabel('Time [s]')
+    ylabel('Yaw rate [deg/s]')
+    legend('Estimated')
+end
+if task == "part5_2c"
+    subplot(311)
+    hold on
+    plot(t, delta_c)
+    hold off
+    title('Desired rudder angle')
+    xlabel('Time [s]')
+    ylabel('Rudder angle [deg]')
+    subplot(312)
+    hold on
+    plot(t, psi)
+    hold off
+    title('Yaw angle')
+    xlabel('Time [s]')
+    ylabel('Yaw [deg]')
+    subplot(313)
+    hold on
+    plot(t, r)
+    hold off
+    title('Yaw rate')
+    xlabel('Time [s]')
+    ylabel('Yaw rate [deg/s]')
 end
