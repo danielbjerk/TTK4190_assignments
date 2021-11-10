@@ -24,7 +24,7 @@ geoplot(WP_lat,WP_long,'x-')
 l = rad2deg(l); mu = rad2deg(mu);
 hold on
 fig = geoplot(mu,l,'r-');
-saveas(fig, "Figures/oppg5c_map", "epsc");
+saveas(fig, "Figures/oppg2c_map", "epsc");
 hold off
 
 end
