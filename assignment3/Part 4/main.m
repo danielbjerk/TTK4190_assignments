@@ -8,7 +8,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 close all
 
-task = "part5_2b";
+task = "part5_2c";
 
 h  = 0.1;    % sampling time [s]
 Ns = 60000;%10000;    % no. of samples
@@ -32,6 +32,8 @@ eta_n_0 = [0 0 deg2rad(-110)]';       % initial position & heading
 delta = 0;  
 n = 0;
 x = [nu_b_0' eta_n_0' delta n]';
+xdot = zeros(8, 1);
+delta_c = 0;
 
 % Controllers
 % Yaw PID-controller design parameters
@@ -76,12 +78,12 @@ threshold_radius = 10*L_oa;
 lookahead_delta = 10*L_oa;
 
 % Kalman Filter variables
-measurement_noise = 0.5 * pi/180;
-process_noise_r = 0.1 * pi/180;
+measurement_noise_psi = 0.5 * pi/180;
+measurement_noise_r = 0.1 * pi/180;
 x0_est = [0 0 0]';
 P0_est = eye(3);
-R = measurement_noise;
-Q = diag([process_noise_r, 0.01]);
+R = measurement_noise_psi;
+Q = 1e-8*eye(2);
 
 x_est = x0_est;
 P_est = P0_est;
@@ -121,6 +123,24 @@ for i=1:Ns+1
     
     psi = eta_n(3);
     r = nu_b(3);
+    
+    % Kalman filter
+    y = [normrnd(x(6), measurement_noise_psi);       % Generate measurement
+         normrnd(xdot(6), measurement_noise_r)];
+    
+    K_KF = P_est * C_d'/(C_d * P_est * C_d' + R);  % Kalman gain
+    
+    % Corrector
+    x_est = x_est + K_KF * (y(1) - C_d * x_est); % D = 0
+    P_est = (eye(3) - K_KF * C_d) * P_est * (eye(3) - K_KF * C_d)' + K_KF * R * K_KF';
+    
+    x_estimates(i, :) = x_est;
+    y_t(i, :) = y;
+
+      
+    % Predictor
+    x_est = A_d * x_est + B_d * delta_c;
+    P_est = A_d * P_est * A_d' + E_d * Q * E_d';
     
     % current disturbance
     Vc = 1;
@@ -213,7 +233,7 @@ for i=1:Ns+1
         
     % control laws
     % yaw
-    e_psi = ssa(psi - psi_d);
+    e_psi = ssa(x_estimates(i,1) - psi_d);
     e_psi_int = e_psi_int + h*e_psi;
     
     delta_c = -(Kp*e_psi + Kd*r + Ki*e_psi_int); % rudder angle command (rad)  
@@ -238,23 +258,6 @@ for i=1:Ns+1
  
     % Euler integration
     x = euler2(xdot,x,h);
-    
-    %% Kalman filter
-    y = [normrnd(x(6), measurement_noise);       % Generate measurement
-         normrnd(xdot(6), process_noise_r)];
-    
-    K_KF = P_est * C_d'/(C_d * P_est * C_d' + R);  % Kalman gain
-    
-    % Corrector
-    x_est = x_est + K_KF * (y(1) - C_d * x_est); % D = 0
-    P_est = (eye(3) - K_KF * C_d) * P_est * (eye(3) - K_KF * C_d)' + K_KF * R * K_KF';
-    
-    x_estimates(i, :) = x_est;
-    y_t(i, :) = y;
-    
-    % Predictor
-    x_est = A_d * x_est + B_d * delta_c;
-    P_est = A_d * P_est * A_d' + E_d * Q * E_d';
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -275,36 +278,36 @@ u_d     = simdata(:,12);                % m/s
 psi_d   = (180/pi) * simdata(:,13);     % deg
 r_d     = (180/pi) * simdata(:,14);     % deg/s
 
-figure(1)
-figure(gcf)
-subplot(311)
-plot(y,x,'linewidth',2); axis('equal')
-title('North-East positions (m)'); xlabel('(m)'); ylabel('(m)'); 
-subplot(312)
-plot(t,psi,t,psi_d,'linewidth',2);
-legend("Actual", "Desired");
-title('Actual and desired yaw angles (deg)'); xlabel('time (s)');
-subplot(313)
-plot(t,r,t,r_d,'linewidth',2);
-legend("Actual", "Desired");
-title('Actual and desired yaw rates (deg/s)'); xlabel('time (s)');
-
-%saveas(gcf, "Figures\oppg1c_pos-and-yaw.eps")
-
-figure(2)
-figure(gcf)
-subplot(311)
-plot(t,u,t,u_d,'linewidth',2);
-legend("Actual", "Desired");
-title('Actual and desired surge velocities (m/s)'); xlabel('time (s)');
-subplot(312)
-plot(t,n,t,n_c,'linewidth',2);
-legend("Actual", "Desired");
-title('Actual and commanded propeller speed (rpm)'); xlabel('time (s)');
-subplot(313)
-plot(t,delta,t,delta_c,'linewidth',2);
-legend("Actual", "Desired");
-title('Actual and commanded rudder angles (deg)'); xlabel('time (s)');
+% figure(1)
+% figure(gcf)
+% subplot(311)
+% plot(y,x,'linewidth',2); axis('equal')
+% title('North-East positions (m)'); xlabel('(m)'); ylabel('(m)'); 
+% subplot(312)
+% plot(t,psi,t,psi_d,'linewidth',2);
+% legend("Actual", "Desired");
+% title('Actual and desired yaw angles (deg)'); xlabel('time (s)');
+% subplot(313)
+% plot(t,r,t,r_d,'linewidth',2);
+% legend("Actual", "Desired");
+% title('Actual and desired yaw rates (deg/s)'); xlabel('time (s)');
+% 
+% %saveas(gcf, "Figures\oppg1c_pos-and-yaw.eps")
+% 
+% figure(2)
+% figure(gcf)
+% subplot(311)
+% plot(t,u,t,u_d,'linewidth',2);
+% legend("Actual", "Desired");
+% title('Actual and desired surge velocities (m/s)'); xlabel('time (s)');
+% subplot(312)
+% plot(t,n,t,n_c,'linewidth',2);
+% legend("Actual", "Desired");
+% title('Actual and commanded propeller speed (rpm)'); xlabel('time (s)');
+% subplot(313)
+% plot(t,delta,t,delta_c,'linewidth',2);
+% legend("Actual", "Desired");
+% title('Actual and commanded rudder angles (deg)'); xlabel('time (s)');
 
 %saveas(gcf, "Figures\oppg1c_surge-and-rudder.eps")
 
@@ -384,4 +387,27 @@ if task == "part5_2b"
     xlabel('Time [s]')
     ylabel('Yaw rate [deg/s]')
     legend('Estimated')
+end
+if task == "part5_2c"
+    subplot(311)
+    hold on
+    plot(t, delta_c)
+    hold off
+    title('Desired rudder angle')
+    xlabel('Time [s]')
+    ylabel('Rudder angle [deg]')
+    subplot(312)
+    hold on
+    plot(t, psi)
+    hold off
+    title('Yaw angle')
+    xlabel('Time [s]')
+    ylabel('Yaw [deg]')
+    subplot(313)
+    hold on
+    plot(t, r)
+    hold off
+    title('Yaw rate')
+    xlabel('Time [s]')
+    ylabel('Yaw rate [deg/s]')
 end
