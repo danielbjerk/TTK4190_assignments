@@ -23,7 +23,8 @@ geoplot(WP_lat,WP_long,'x-')
 [l,mu,~] = flat2llh(x,y,zeros(1,length(x)),l_0,mu_0,h_ref);
 l = rad2deg(l); mu = rad2deg(mu);
 hold on
-geoplot(mu,l,'r-')
+fig = geoplot(mu,l,'r-');
+%saveas(fig, "Figures/oppg1c_map.eps");
 
 end
 

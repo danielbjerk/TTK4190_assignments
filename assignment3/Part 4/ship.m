@@ -54,7 +54,8 @@ xg = -3.7;              % CG x-ccordinate (m)
 L = 161;                % length (m)
 B = 21.8;               % beam (m)
 T = 8.9;                % draft (m)
-KT = 0.7;               % propeller coefficient (-)
+KT = 0.6367;               % propeller coefficient (-)
+KQ = 0.1390;
 Dia = 3.3;              % propeller diameter (m)
 rho = 1025;             % density of water (m/s^3)
 
@@ -63,12 +64,6 @@ I_m = 100000;
 K_m = 0.6;
 T_m = 10;
 tau_prop = 0;
-
-Ja = 0;
-AEAO = 0.65;
-PD = 1.5; 
-z = 4;
-[KT , KQ] = wageningen(0,PD, AEAO, z);
 
 % rudder limitations
 delta_max  = 40 * pi/180;        % max rudder angle      (rad)
