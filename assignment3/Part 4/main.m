@@ -11,7 +11,7 @@ close all
 task = "";
 
 h  = 0.1;    % sampling time [s]
-Ns = 80000;%10000;    % no. of samples
+Ns = 60000;%10000;    % no. of samples
 
 U_ref   = 9;            % desired surge speed (m/s)
 
@@ -19,6 +19,12 @@ U_ref   = 9;            % desired surge speed (m/s)
 % ship parameters
 L_oa = 161;             % lenght of ship (m)
 delta_max  = 40 * pi/180; % Rudder angle
+% Motor coefficents
+Ja = 0;
+AEAO = 0.65;
+PD = 1.5; 
+z = 4;
+[KT , KQ] = wageningen(Ja,PD, AEAO, z);
 
 % initial states
 nu_b_0  = [0.1 0 0]';     % initial velocity
@@ -56,11 +62,18 @@ A_r_y =     [   0,      1,      0;
                     0,      0,      1;
                     -w_r_y^3,   -(2*zeta_r_y + 1)*w_r_y^2,  -(2*zeta_r_y + 1)*w_r_y];
 B_r_y = [0; 0; w_r_y^3];
+% Surge velocity (unused)
+w_n_u = 0.01;
+x_r_u = U_ref;
 
 % guidance objective
 waypoints = load("WP.mat").WP;
-threshold_radius = 80;
-lookahead_delta = 3*L_oa;
+wp_last = waypoints(:,1);
+wp_next = waypoints(:,2);
+
+at_endpoint = false;
+threshold_radius = 10*L_oa;
+lookahead_delta = 10*L_oa;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % MAIN LOOP
@@ -128,7 +141,27 @@ for i=1:Ns+1
     
     % references
     % guidance law (yaw reference)
-    chi_d = guidance(eta_n(1:2), waypoints, threshold_radius, lookahead_delta);
+    % Current status
+    [x_p, y_p, y_e_p] = crosstrack(wp_next(1),...
+                                   wp_next(2),...
+                                   wp_last(1),...
+                                   wp_last(2),...
+                                   eta_n(1),...
+                                   eta_n(2));
+    distance_to_target = vecnorm(wp_next -  [x_p; y_p]);
+    
+    % Switch waypoints?
+    if (distance_to_target < threshold_radius) && (vecnorm(wp_next - waypoints(:,end)) > 0.001) % Spooky
+        waypoints = waypoints(:,2:end);
+
+        wp_last = waypoints(:,1);
+        wp_next = waypoints(:,2);
+        
+    elseif (distance_to_target < 100) && (vecnorm(wp_next - waypoints(:,end)) < 0.001) % Spooky2
+        at_endpoint = true;
+    end
+    
+    chi_d = guidance(eta_n, wp_last, wp_next, lookahead_delta);
     psi_ref = chi_d;
     
     % reference models
@@ -138,6 +171,13 @@ for i=1:Ns+1
     psi_d = x_r_y(1);
     r_d = x_r_y(2);
     % foreward velocity
+    if at_endpoint
+        U_ref = 0;
+    else
+        U_ref = U_ref;
+    end
+    %x_r_u = x_r_u + (-w_n_u*x_r_u + U_ref)*h;
+    %u_d = x_r_u;
     u_d = U_ref;
         
     % control laws
@@ -191,7 +231,6 @@ figure(1)
 figure(gcf)
 subplot(311)
 plot(y,x,'linewidth',2); axis('equal')
-legend("Actual", "Desired");
 title('North-East positions (m)'); xlabel('(m)'); ylabel('(m)'); 
 subplot(312)
 plot(t,psi,t,psi_d,'linewidth',2);
@@ -202,7 +241,7 @@ plot(t,r,t,r_d,'linewidth',2);
 legend("Actual", "Desired");
 title('Actual and desired yaw rates (deg/s)'); xlabel('time (s)');
 
-%saveas(gcf, "Figures\oppg1c_integrator-windup.png")
+%saveas(gcf, "Figures\oppg1c_pos-and-yaw.eps")
 
 figure(2)
 figure(gcf)
@@ -218,6 +257,8 @@ subplot(313)
 plot(t,delta,t,delta_c,'linewidth',2);
 legend("Actual", "Desired");
 title('Actual and commanded rudder angles (deg)'); xlabel('time (s)');
+
+%saveas(gcf, "Figures\oppg1c_surge-and-rudder.eps")
 
 pathplotter(x,y);
 
